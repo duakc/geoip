@@ -1,7 +1,7 @@
 .PHONY: generate
 generate:
 	@go mod tidy
-	@go run . --from "data" --output "data" --srs --mrs --mmdb --all
+	@go run . --from "data" --output "generated" --srs --mrs --mmdb --all
 
 .PHONY: testrun
 testrun:

@@ -44,10 +44,8 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          cd data/ip
+          cd generated/ip
 
-          # Publish the contents of data/ip as the ROOT of the `release` branch.
-          # A throwaway single-commit repo keeps the release branch clean (no history bloat).
           rm -rf .git
           git init -b release
           git add -A
