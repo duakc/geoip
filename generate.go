@@ -16,6 +16,7 @@ var (
 
 	generateSRS  bool
 	generateMRS  bool
+	generateMMDB bool
 	generateAll  bool
 	providerPath string
 	outputPath   string
@@ -30,6 +31,7 @@ type Entry struct {
 func main() {
 	flag.BoolVar(&generateSRS, "srs", false, "Generate SRS")
 	flag.BoolVar(&generateMRS, "mrs", false, "Generate MRS")
+	flag.BoolVar(&generateMMDB, "mmdb", false, "Generate merged MMDB")
 	flag.BoolVar(&generateAll, "all", false, "Generate all format SRS/MRS")
 	flag.StringVar(&providerPath, "from", "./data/", "Setup datasource")
 	flag.StringVar(&outputPath, "output", "./output/", "Setup output")
@@ -38,7 +40,7 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
-	if !generateSRS && !generateMRS {
+	if !generateSRS && !generateMRS && !generateMMDB {
 		flag.Usage()
 		return
 	}
@@ -90,7 +92,21 @@ func main() {
 			return
 		}
 	}
+	if generateMMDB {
+		err := generateMMDBFunc(entries)
+		if err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "[ERROR] %s\n", err.Error())
+			return
+		}
+	}
 
+}
+
+func generateMMDBFunc(entries []Entry) error {
+	path := filepath.Join(outputPath, "ip", "mmdb", "geoip.mmdb")
+	return openWrite(path, func(w io.Writer) error {
+		return WriteMergedMMDB(w, entries)
+	})
 }
 
 func generateSRSFunc(entries []Entry) error {

@@ -1,49 +1,42 @@
 # geoip
 
-自定义 GeoIP 规则集，每日自动更新，发布在 [`release`](https://github.com/duakc/geoip/tree/release) 分支。
+自定义 GeoIP，基于 MaxMind GeoLite2，每日自动更新，发布在 [`release`](https://github.com/duakc/geoip/tree/release) 分支。
 
-| 代码 | 说明 |
-| --- | --- |
-| `cn` | 中国大陆 |
-| `cn-cm` | 中国移动 |
-| `cn-ct` | 中国电信 |
-| `cn-cu` | 中国联通 |
+包含所有国家（ISO 3166-1 代码，小写如 `cn`、`us`、`jp`），并在此基础上额外覆写/新增了下方「自定义」中的代码。
 
 ## 下载
 
 GitHub 直连在国内可能不稳定，建议优先使用 jsDelivr。
 
-### txt
+合并 mmdb（单文件，包含全部代码）：
 
-| 代码 | GitHub | jsDelivr |
+- GitHub：<https://raw.githubusercontent.com/duakc/geoip/release/mmdb/geoip.mmdb>
+- jsDelivr：<https://cdn.jsdelivr.net/gh/duakc/geoip@release/mmdb/geoip.mmdb>
+
+其它格式按代码取用，把 `<code>` 替换为目标代码（如 `cn`、`us`）：
+
+| 格式 | jsDelivr | 说明 |
 | --- | --- | --- |
-| cn | [cn](https://raw.githubusercontent.com/duakc/geoip/release/cn) | [cn](https://cdn.jsdelivr.net/gh/duakc/geoip@release/cn) |
-| cn-cm | [cn-cm](https://raw.githubusercontent.com/duakc/geoip/release/cn-cm) | [cn-cm](https://cdn.jsdelivr.net/gh/duakc/geoip@release/cn-cm) |
-| cn-ct | [cn-ct](https://raw.githubusercontent.com/duakc/geoip/release/cn-ct) | [cn-ct](https://cdn.jsdelivr.net/gh/duakc/geoip@release/cn-ct) |
-| cn-cu | [cn-cu](https://raw.githubusercontent.com/duakc/geoip/release/cn-cu) | [cn-cu](https://cdn.jsdelivr.net/gh/duakc/geoip@release/cn-cu) |
+| txt | `https://cdn.jsdelivr.net/gh/duakc/geoip@release/<code>` | 纯文本 CIDR 列表 |
+| srs | `https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/<code>.srs` | sing-box（另有 `srs/<code>.json`） |
+| mrs | `https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/<code>.mrs` | mihomo（另有 `.list` / `.yaml` / `.classical`） |
 
-### srs
+> GitHub 直连把 `cdn.jsdelivr.net/gh/duakc/geoip@release` 换成 `raw.githubusercontent.com/duakc/geoip/release` 即可。例：中国移动 srs → `https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-cm.srs`
 
-| 代码 | GitHub | jsDelivr | json |
-| --- | --- | --- | --- |
-| cn | [cn.srs](https://raw.githubusercontent.com/duakc/geoip/release/srs/cn.srs) | [cn.srs](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn.srs) | [cn.json](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn.json) |
-| cn-cm | [cn-cm.srs](https://raw.githubusercontent.com/duakc/geoip/release/srs/cn-cm.srs) | [cn-cm.srs](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-cm.srs) | [cn-cm.json](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-cm.json) |
-| cn-ct | [cn-ct.srs](https://raw.githubusercontent.com/duakc/geoip/release/srs/cn-ct.srs) | [cn-ct.srs](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-ct.srs) | [cn-ct.json](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-ct.json) |
-| cn-cu | [cn-cu.srs](https://raw.githubusercontent.com/duakc/geoip/release/srs/cn-cu.srs) | [cn-cu.srs](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-cu.srs) | [cn-cu.json](https://cdn.jsdelivr.net/gh/duakc/geoip@release/srs/cn-cu.json) |
+## 自定义
 
-### mrs
+以下代码由本仓库额外覆写或新增，优先级高于 MaxMind：
 
-| 代码 | mrs | list | yaml | classical |
-| --- | --- | --- | --- | --- |
-| cn | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn.mrs) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn.mrs) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn.list) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn.list) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn.yaml) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn.yaml) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn.classical) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn.classical) |
-| cn-cm | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cm.mrs) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cm.mrs) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cm.list) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cm.list) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cm.yaml) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cm.yaml) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cm.classical) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cm.classical) |
-| cn-ct | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-ct.mrs) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-ct.mrs) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-ct.list) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-ct.list) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-ct.yaml) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-ct.yaml) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-ct.classical) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-ct.classical) |
-| cn-cu | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cu.mrs) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cu.mrs) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cu.list) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cu.list) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cu.yaml) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cu.yaml) | [GitHub](https://raw.githubusercontent.com/duakc/geoip/release/mrs/cn-cu.classical) · [jsDelivr](https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/cn-cu.classical) |
+| 代码 | 说明 |
+| --- | --- |
+| `cn` | 中国大陆（覆写 MaxMind） |
+| `cn-cm` | 中国移动 |
+| `cn-ct` | 中国电信 |
+| `cn-cu` | 中国联通 |
 
 ## 致谢
 
-数据来源于以下项目：
-
+- [MaxMind GeoLite2](https://www.maxmind.com)
 - [misakaio/chnroutes2](https://github.com/misakaio/chnroutes2)
 - [gaoyifan/china-operator-ip](https://github.com/gaoyifan/china-operator-ip)
 

@@ -1,18 +1,30 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
+
+	maxminddb "github.com/oschwald/maxminddb-golang/v2"
+	"go4.org/netipx"
 )
 
 const (
 	output = "data/ip"
 
 	source = "source.json"
+
+	maxmindEdition = "GeoLite2-Country"
+	maxmindURL     = "https://download.maxmind.com/app/geoip_download"
 )
 
 func main() {
@@ -20,19 +32,147 @@ func main() {
 	if err != nil {
 		fatalf("failed to unmarshal source: %v", err)
 	}
-	err = fetchAll(config, output)
-	if err != nil {
-		fatalf("failed to fetch: %v", err)
+
+	if err = os.MkdirAll(output, 0755); err != nil {
+		fatalf("failed to mkdir output: %v", err)
+	}
+
+	client := &http.Client{}
+
+	// source.json has the highest priority: collect its codes so that MaxMind
+	// data for the same code is ignored even when MaxMind has it.
+	overrides := make(map[string]struct{}, len(config.Geoip))
+	for _, c := range config.Geoip {
+		overrides[c.Code] = struct{}{}
+	}
+
+	// Generate every country from the MaxMind mmdb, skipping codes overridden
+	// by source.json.
+	if err = fetchMaxmind(client, output, overrides); err != nil {
+		fatalf("failed to fetch maxmind: %v", err)
+	}
+
+	// Write source.json data on top (overrides + new additions).
+	if err = fetchAll(client, config, output); err != nil {
+		fatalf("failed to fetch source: %v", err)
 	}
 }
 
-func fetchAll(config geoipConfig, output string) error {
-	err := os.MkdirAll(output, 0755)
+// fetchMaxmind downloads the GeoLite2 Country mmdb, then writes a per-country
+// CIDR file for every country, skipping any code present in skip.
+func fetchMaxmind(client *http.Client, output string, skip map[string]struct{}) error {
+	key := os.Getenv("MAXMIND_LICENSE_KEY")
+	if key == "" {
+		return fmt.Errorf("MAXMIND_LICENSE_KEY is not set")
+	}
+
+	u := fmt.Sprintf("%s?edition_id=%s&license_key=%s&suffix=tar.gz",
+		maxmindURL, maxmindEdition, url.QueryEscape(key))
+	data, err := doFetch(client, u)
 	if err != nil {
 		return err
 	}
 
-	client := &http.Client{}
+	mmdb, err := extractMMDB(data)
+	if err != nil {
+		return fmt.Errorf("extract mmdb: %w", err)
+	}
+
+	reader, err := maxminddb.OpenBytes(mmdb)
+	if err != nil {
+		return fmt.Errorf("open mmdb: %w", err)
+	}
+	defer reader.Close()
+
+	// country code -> aggregated IP set.
+	builders := make(map[string]*netipx.IPSetBuilder)
+	for result := range reader.Networks() {
+		var rec struct {
+			Country struct {
+				ISOCode string `maxminddb:"iso_code"`
+			} `maxminddb:"country"`
+			RegisteredCountry struct {
+				ISOCode string `maxminddb:"iso_code"`
+			} `maxminddb:"registered_country"`
+		}
+		if err = result.Decode(&rec); err != nil {
+			return fmt.Errorf("decode record: %w", err)
+		}
+
+		// Fall back to the registered country when the network has no country.
+		iso := rec.Country.ISOCode
+		if iso == "" {
+			iso = rec.RegisteredCountry.ISOCode
+		}
+		if iso == "" {
+			continue
+		}
+		code := strings.ToLower(iso)
+		if _, skipped := skip[code]; skipped {
+			continue
+		}
+
+		b := builders[code]
+		if b == nil {
+			b = &netipx.IPSetBuilder{}
+			builders[code] = b
+		}
+		b.AddPrefix(result.Prefix())
+	}
+
+	codes := make([]string, 0, len(builders))
+	for code := range builders {
+		codes = append(codes, code)
+	}
+	sort.Strings(codes)
+
+	for _, code := range codes {
+		set, err := builders[code].IPSet()
+		if err != nil {
+			return fmt.Errorf("%s: %w", code, err)
+		}
+		if err = writeIPSet(filepath.Join(output, code), set); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// extractMMDB pulls the .mmdb file out of a MaxMind tar.gz archive.
+func extractMMDB(data []byte) ([]byte, error) {
+	gz, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+
+	tr := tar.NewReader(gz)
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasSuffix(hdr.Name, ".mmdb") {
+			return io.ReadAll(tr)
+		}
+	}
+	return nil, fmt.Errorf("no .mmdb entry in archive")
+}
+
+// writeIPSet writes the set's prefixes as a newline-separated CIDR list.
+func writeIPSet(path string, set *netipx.IPSet) error {
+	var buf bytes.Buffer
+	for _, p := range set.Prefixes() {
+		buf.WriteString(p.String())
+		buf.WriteByte('\n')
+	}
+	return os.WriteFile(path, buf.Bytes(), 0644)
+}
+
+func fetchAll(client *http.Client, config geoipConfig, output string) error {
 	for _, c := range config.Geoip {
 		var (
 			data []byte
@@ -177,11 +317,11 @@ func (c *geoipConfig) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-func fatalf(format string, args ...interface{}) {
+func fatalf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, "(fatal) "+format+"\n", args...)
 	os.Exit(1)
 }
 
-func warnf(format string, args ...interface{}) {
+func warnf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, "(warn) "+format+"\n", args...)
 }

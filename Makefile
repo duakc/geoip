@@ -1,12 +1,12 @@
 .PHONY: generate
 generate:
 	@go mod tidy
-	@go run . --from "data" --output "data" --srs --mrs --all
+	@go run . --from "data" --output "data" --srs --mrs --mmdb --all
 
 .PHONY: testrun
 testrun:
 	@go mod tidy
-	@go run . --from "./testdata" --output "./testoutput" --srs --mrs --all
+	@go run . --from "./testdata" --output "./testoutput" --srs --mrs --mmdb --all
 
 
 .PHONY: fetch

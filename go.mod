@@ -5,8 +5,10 @@ go 1.26.2
 require (
 	github.com/goccy/go-yaml v1.19.2
 	github.com/klauspost/compress v1.18.6
+	github.com/maxmind/mmdbwriter v1.2.0
 	github.com/metacubex/mihomo v1.19.27
 	github.com/openacid/low v0.1.21
+	github.com/oschwald/maxminddb-golang/v2 v2.1.1
 	github.com/sagernet/sing v0.8.10
 	github.com/stretchr/testify v1.11.1
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
