@@ -1,0 +1,21 @@
+{
+  "geoip": [
+    {
+      "code": "cn",
+      "source_v4": "https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt",
+      "source_v6": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china6.txt"
+    },
+    {
+      "code": "cn-cm",
+      "source": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/cmcc46.txt"
+    },
+    {
+      "code": "cn-ct",
+      "source": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/chinanet46.txt"
+    },
+    {
+      "code": "cn-cu",
+      "source": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/unicom46.txt"
+    }
+  ]
+}
