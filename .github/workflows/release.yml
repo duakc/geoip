@@ -44,7 +44,8 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-          cd generated/ip
+          mkdir -p generated/ip && cd generated/ip
+          cp ../../data/ip/* .
 
           rm -rf .git
           git init -b release
