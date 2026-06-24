@@ -135,9 +135,13 @@ func fetchAll(client *http.Client, config geoipConfig, output string) error {
 			data []byte
 			err  error
 		)
-		if c.Source != "" {
+		switch {
+		case len(c.Prefixes) > 0:
+			// Inline constant data, no fetch.
+			data = []byte(strings.Join(c.Prefixes, "\n") + "\n")
+		case c.Source != "":
 			data, err = doFetch(client, c.Source)
-		} else {
+		default:
 			data, err = fetchV4V6(client, c.SourceV4, c.SourceV6)
 		}
 
@@ -240,6 +244,9 @@ type geoipConfig struct {
 		Source   string `json:"source"`
 		SourceV4 string `json:"source_v4"`
 		SourceV6 string `json:"source_v6"`
+		// Prefixes is inline constant data (CIDR per element), used in place of
+		// fetching from a URL — e.g. the fixed private/reserved ranges.
+		Prefixes []string `json:"prefixes"`
 	} `json:"geoip"`
 }
 
@@ -256,6 +263,9 @@ func (c *geoipConfig) UnmarshalJSON(b []byte) error {
 	for idx, geoip := range dummyConfig.Geoip {
 		if geoip.Code == "" {
 			return fmt.Errorf("[%d]: no code", idx)
+		}
+		if len(geoip.Prefixes) > 0 {
+			continue
 		}
 		if geoip.Source == "" {
 			if geoip.SourceV4 == "" && geoip.SourceV6 == "" {

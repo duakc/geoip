@@ -48,6 +48,7 @@ https://cdn.jsdelivr.net/gh/duakc/geoip@release/mrs/<code>.mrs
 | `cn-cm` | 中国移动 |
 | `cn-ct` | 中国电信 |
 | `cn-cu` | 中国联通 |
+| `private` | 私有 / 保留地址（RFC1918 等） |
 
 ## 致谢
 
