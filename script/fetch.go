@@ -1,12 +1,9 @@
 package main
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,8 +20,8 @@ const (
 
 	source = "source.json"
 
-	maxmindEdition = "GeoLite2-Country"
-	maxmindURL     = "https://download.maxmind.com/app/geoip_download"
+	// IPinfo free "IP to Country" database, served as a raw .mmdb file.
+	ipinfoURL = "https://ipinfo.io/data/free/country.mmdb"
 )
 
 func main() {
@@ -46,10 +43,10 @@ func main() {
 		overrides[c.Code] = struct{}{}
 	}
 
-	// Generate every country from the MaxMind mmdb, skipping codes overridden
+	// Generate every country from the IPinfo mmdb, skipping codes overridden
 	// by source.json.
-	if err = fetchMaxmind(client, output, overrides); err != nil {
-		fatalf("failed to fetch maxmind: %v", err)
+	if err = fetchIPinfo(client, output, overrides); err != nil {
+		fatalf("failed to fetch ipinfo: %v", err)
 	}
 
 	// Write source.json data on top (overrides + new additions).
@@ -58,27 +55,21 @@ func main() {
 	}
 }
 
-// fetchMaxmind downloads the GeoLite2 Country mmdb, then writes a per-country
+// fetchIPinfo downloads the IPinfo Country mmdb, then writes a per-country
 // CIDR file for every country, skipping any code present in skip.
-func fetchMaxmind(client *http.Client, output string, skip map[string]struct{}) error {
-	key := os.Getenv("MAXMIND_LICENSE_KEY")
-	if key == "" {
-		return fmt.Errorf("MAXMIND_LICENSE_KEY is not set")
+func fetchIPinfo(client *http.Client, output string, skip map[string]struct{}) error {
+	token := os.Getenv("IPINFO_TOKEN")
+	if token == "" {
+		return fmt.Errorf("IPINFO_TOKEN is not set")
 	}
 
-	u := fmt.Sprintf("%s?edition_id=%s&license_key=%s&suffix=tar.gz",
-		maxmindURL, maxmindEdition, url.QueryEscape(key))
+	u := fmt.Sprintf("%s?token=%s", ipinfoURL, url.QueryEscape(token))
 	data, err := doFetch(client, u)
 	if err != nil {
 		return err
 	}
 
-	mmdb, err := extractMMDB(data)
-	if err != nil {
-		return fmt.Errorf("extract mmdb: %w", err)
-	}
-
-	reader, err := maxminddb.OpenBytes(mmdb)
+	reader, err := maxminddb.OpenBytes(data)
 	if err != nil {
 		return fmt.Errorf("open mmdb: %w", err)
 	}
@@ -88,26 +79,16 @@ func fetchMaxmind(client *http.Client, output string, skip map[string]struct{}) 
 	builders := make(map[string]*netipx.IPSetBuilder)
 	for result := range reader.Networks() {
 		var rec struct {
-			Country struct {
-				ISOCode string `maxminddb:"iso_code"`
-			} `maxminddb:"country"`
-			RegisteredCountry struct {
-				ISOCode string `maxminddb:"iso_code"`
-			} `maxminddb:"registered_country"`
+			Country string `maxminddb:"country"`
 		}
 		if err = result.Decode(&rec); err != nil {
 			return fmt.Errorf("decode record: %w", err)
 		}
 
-		// Fall back to the registered country when the network has no country.
-		iso := rec.Country.ISOCode
-		if iso == "" {
-			iso = rec.RegisteredCountry.ISOCode
-		}
-		if iso == "" {
+		if rec.Country == "" {
 			continue
 		}
-		code := strings.ToLower(iso)
+		code := strings.ToLower(rec.Country)
 		if _, skipped := skip[code]; skipped {
 			continue
 		}
@@ -136,30 +117,6 @@ func fetchMaxmind(client *http.Client, output string, skip map[string]struct{}) 
 		}
 	}
 	return nil
-}
-
-// extractMMDB pulls the .mmdb file out of a MaxMind tar.gz archive.
-func extractMMDB(data []byte) ([]byte, error) {
-	gz, err := gzip.NewReader(bytes.NewReader(data))
-	if err != nil {
-		return nil, err
-	}
-	defer gz.Close()
-
-	tr := tar.NewReader(gz)
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if strings.HasSuffix(hdr.Name, ".mmdb") {
-			return io.ReadAll(tr)
-		}
-	}
-	return nil, fmt.Errorf("no .mmdb entry in archive")
 }
 
 // writeIPSet writes the set's prefixes as a newline-separated CIDR list.

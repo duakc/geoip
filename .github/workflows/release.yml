@@ -33,7 +33,7 @@ jobs:
           key: go-${{ hashFiles('**/go.sum') }}
       - name: "Generate"
         env:
-          MAXMIND_LICENSE_KEY: ${{ secrets.MAXMIND_LICENSE_KEY }}
+          IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
         run: |
           make fetch
           make generate
