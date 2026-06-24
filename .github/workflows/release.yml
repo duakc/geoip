@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - gen
+    paths-ignore:
+      - README.md
+      - .gitignore
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
