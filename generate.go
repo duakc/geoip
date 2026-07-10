@@ -9,6 +9,8 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -105,6 +107,13 @@ func main() {
 func generateMMDBFunc(entries []Entry) error {
 	path := filepath.Join(outputPath, "ip", "mmdb", "geoip.mmdb")
 	return openWrite(path, func(w io.Writer) error {
+
+		entries = slices.DeleteFunc(entries, func(s Entry) bool {
+			// exclude non-ip Entry
+			// exclude private from MMDB
+			return s.Name == "private" || s.Type != "ip"
+		})
+
 		return WriteMergedMMDB(w, entries)
 	})
 }

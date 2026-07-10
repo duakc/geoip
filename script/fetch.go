@@ -149,6 +149,8 @@ func fetchAll(client *http.Client, config geoipConfig, output string) error {
 			return err
 		}
 
+		data = skipNLine(data, c.SkipLineHeader)
+
 		if err = os.WriteFile(filepath.Join(output, c.Code), data, 0644); err != nil {
 			return err
 		}
@@ -247,6 +249,8 @@ type geoipConfig struct {
 		// Prefixes is inline constant data (CIDR per element), used in place of
 		// fetching from a URL — e.g. the fixed private/reserved ranges.
 		Prefixes []string `json:"prefixes"`
+
+		SkipLineHeader int `json:"skip_line_header"`
 	} `json:"geoip"`
 }
 
@@ -291,4 +295,15 @@ func fatalf(format string, args ...any) {
 
 func warnf(format string, args ...any) {
 	_, _ = fmt.Fprintf(os.Stderr, "(warn) "+format+"\n", args...)
+}
+
+func skipNLine(data []byte, n int) []byte {
+	for i := 0; i < n && len(data) >= 1; i++ {
+		nn := bytes.IndexByte(data, '\n')
+		if nn < 0 || nn == len(data)-1 {
+			break
+		}
+		data = data[nn+1:]
+	}
+	return data
 }

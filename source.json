@@ -3,7 +3,8 @@
     {
       "code": "cn",
       "source_v4": "https://raw.githubusercontent.com/misakaio/chnroutes2/master/chnroutes.txt",
-      "source_v6": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china6.txt"
+      "source_v6": "https://raw.githubusercontent.com/gaoyifan/china-operator-ip/ip-lists/china6.txt",
+      "skip_line_header": 2
     },
     {
       "code": "cn-cm",

@@ -16,6 +16,8 @@ var (
 	ErrEmpty = fmt.Errorf("empty")
 )
 
+const bufReadSize = 1 << 14
+
 type RuleSet interface {
 	Count() int64
 	WriteSRS(w io.Writer, format string) error
@@ -58,7 +60,8 @@ func NewDomainFile(path string) (*DomainRuleset, error) {
 	}
 	defer file.Close()
 	domainFile := new(DomainRuleset)
-	sc := bufio.NewScanner(file)
+	bufioFile := bufio.NewReaderSize(file, bufReadSize)
+	sc := bufio.NewScanner(bufioFile)
 	lineCount := -1
 	for sc.Scan() {
 		lineCount += 1
@@ -113,7 +116,8 @@ func NewIPFile(path string) (*IPRuleset, error) {
 	}
 	defer file.Close()
 	ipFile := new(IPRuleset)
-	sc := bufio.NewScanner(file)
+	bufioFile := bufio.NewReaderSize(file, bufReadSize)
+	sc := bufio.NewScanner(bufioFile)
 	lineCount := -1
 	var ipsetbuild netipx.IPSetBuilder
 	for sc.Scan() {

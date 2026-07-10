@@ -1,3 +1,6 @@
+.PHONY: all
+all: fmt fetch generate
+
 .PHONY: generate
 generate:
 	@go mod tidy
