@@ -22,6 +22,11 @@ const (
 
 	// IPinfo free "IP to Country" database, served as a raw .mmdb file.
 	ipinfoURL = "https://ipinfo.io/data/free/country.mmdb"
+
+	// sourceIPinfo is the sentinel value for source_v4/source_v6: instead of a
+	// URL, pull that address family's prefixes for the entry's country code
+	// straight from the IPinfo mmdb.
+	sourceIPinfo = "ipinfo"
 )
 
 func main() {
@@ -36,100 +41,166 @@ func main() {
 
 	client := &http.Client{}
 
-	// source.json has the highest priority: collect its codes so that MaxMind
-	// data for the same code is ignored even when MaxMind has it.
+	// source.json has the highest priority: collect its codes so that IPinfo
+	// data for the same code is ignored even when IPinfo has it.
 	overrides := make(map[string]struct{}, len(config.Geoip))
 	for _, c := range config.Geoip {
 		overrides[c.Code] = struct{}{}
 	}
 
+	// Download and parse the IPinfo mmdb once; both the "generate every
+	// country" pass and any source.json entry using the "ipinfo" sentinel read
+	// from it.
+	db, err := parseIPinfo(client)
+	if err != nil {
+		fatalf("failed to parse ipinfo: %v", err)
+	}
+
 	// Generate every country from the IPinfo mmdb, skipping codes overridden
 	// by source.json.
-	if err = fetchIPinfo(client, output, overrides); err != nil {
-		fatalf("failed to fetch ipinfo: %v", err)
+	if err = writeAllCountries(db, output, overrides); err != nil {
+		fatalf("failed to write ipinfo countries: %v", err)
 	}
 
 	// Write source.json data on top (overrides + new additions).
-	if err = fetchAll(client, config, output); err != nil {
+	if err = fetchAll(client, config, output, db); err != nil {
 		fatalf("failed to fetch source: %v", err)
 	}
 }
 
-// fetchIPinfo downloads the IPinfo Country mmdb, then writes a per-country
-// CIDR file for every country, skipping any code present in skip.
-func fetchIPinfo(client *http.Client, output string, skip map[string]struct{}) error {
+// ipinfoDB holds per-country IP sets parsed from the IPinfo mmdb, split by
+// address family so that source.json can pull v4 or v6 independently via the
+// "ipinfo" sentinel.
+type ipinfoDB struct {
+	v4 map[string]*netipx.IPSetBuilder
+	v6 map[string]*netipx.IPSetBuilder
+}
+
+// parseIPinfo downloads the IPinfo Country mmdb and buckets every network into
+// per-country, per-family IP sets.
+func parseIPinfo(client *http.Client) (*ipinfoDB, error) {
 	token := os.Getenv("IPINFO_TOKEN")
 	if token == "" {
-		return fmt.Errorf("IPINFO_TOKEN is not set")
+		return nil, fmt.Errorf("IPINFO_TOKEN is not set")
 	}
 
 	u := fmt.Sprintf("%s?token=%s", ipinfoURL, url.QueryEscape(token))
 	data, err := doFetch(client, u)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	reader, err := maxminddb.OpenBytes(data)
 	if err != nil {
-		return fmt.Errorf("open mmdb: %w", err)
+		return nil, fmt.Errorf("open mmdb: %w", err)
 	}
 	defer reader.Close()
 
-	// country code -> aggregated IP set.
-	builders := make(map[string]*netipx.IPSetBuilder)
+	db := &ipinfoDB{
+		v4: make(map[string]*netipx.IPSetBuilder),
+		v6: make(map[string]*netipx.IPSetBuilder),
+	}
 	for result := range reader.Networks() {
 		var rec struct {
 			Country string `maxminddb:"country"`
 		}
 		if err = result.Decode(&rec); err != nil {
-			return fmt.Errorf("decode record: %w", err)
+			return nil, fmt.Errorf("decode record: %w", err)
 		}
 
 		if rec.Country == "" {
 			continue
 		}
 		code := strings.ToLower(rec.Country)
-		if _, skipped := skip[code]; skipped {
-			continue
-		}
+		prefix := result.Prefix()
 
-		b := builders[code]
+		m := db.v6
+		if prefix.Addr().Is4() {
+			m = db.v4
+		}
+		b := m[code]
 		if b == nil {
 			b = &netipx.IPSetBuilder{}
-			builders[code] = b
+			m[code] = b
 		}
-		b.AddPrefix(result.Prefix())
+		b.AddPrefix(prefix)
+	}
+	return db, nil
+}
+
+// prefixes returns the aggregated CIDR list for a country code and family
+// ("v4" or "v6") as newline-separated bytes.
+func (db *ipinfoDB) prefixes(code, family string) ([]byte, error) {
+	var m map[string]*netipx.IPSetBuilder
+	switch family {
+	case "v4":
+		m = db.v4
+	case "v6":
+		m = db.v6
+	default:
+		return nil, fmt.Errorf("ipinfo: unknown family %q", family)
 	}
 
-	codes := make([]string, 0, len(builders))
-	for code := range builders {
+	b := m[code]
+	if b == nil {
+		return nil, fmt.Errorf("ipinfo: no %s data for %q", family, code)
+	}
+	set, err := b.IPSet()
+	if err != nil {
+		return nil, fmt.Errorf("ipinfo: %s %s: %w", code, family, err)
+	}
+	return ipSetBytes(set), nil
+}
+
+// writeAllCountries writes a per-country CIDR file (v4 then v6) for every
+// country in the IPinfo mmdb, skipping any code present in skip.
+func writeAllCountries(db *ipinfoDB, output string, skip map[string]struct{}) error {
+	seen := make(map[string]struct{}, len(db.v4)+len(db.v6))
+	for code := range db.v4 {
+		seen[code] = struct{}{}
+	}
+	for code := range db.v6 {
+		seen[code] = struct{}{}
+	}
+
+	codes := make([]string, 0, len(seen))
+	for code := range seen {
 		codes = append(codes, code)
 	}
 	sort.Strings(codes)
 
 	for _, code := range codes {
-		set, err := builders[code].IPSet()
-		if err != nil {
-			return fmt.Errorf("%s: %w", code, err)
+		if _, skipped := skip[code]; skipped {
+			continue
 		}
-		if err = writeIPSet(filepath.Join(output, code), set); err != nil {
+
+		var buf bytes.Buffer
+		for _, family := range []string{"v4", "v6"} {
+			data, err := db.prefixes(code, family)
+			if err != nil {
+				// A country may have only one address family.
+				continue
+			}
+			buf.Write(data)
+		}
+		if err := os.WriteFile(filepath.Join(output, code), buf.Bytes(), 0644); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// writeIPSet writes the set's prefixes as a newline-separated CIDR list.
-func writeIPSet(path string, set *netipx.IPSet) error {
+// ipSetBytes renders the set's prefixes as a newline-separated CIDR list.
+func ipSetBytes(set *netipx.IPSet) []byte {
 	var buf bytes.Buffer
 	for _, p := range set.Prefixes() {
 		buf.WriteString(p.String())
 		buf.WriteByte('\n')
 	}
-	return os.WriteFile(path, buf.Bytes(), 0644)
+	return buf.Bytes()
 }
 
-func fetchAll(client *http.Client, config geoipConfig, output string) error {
+func fetchAll(client *http.Client, config geoipConfig, output string, db *ipinfoDB) error {
 	for _, c := range config.Geoip {
 		var (
 			data []byte
@@ -142,7 +213,7 @@ func fetchAll(client *http.Client, config geoipConfig, output string) error {
 		case c.Source != "":
 			data, err = doFetch(client, c.Source)
 		default:
-			data, err = fetchV4V6(client, c.SourceV4, c.SourceV6)
+			data, err = fetchV4V6(client, db, c.Code, c.SourceV4, c.SourceV6)
 		}
 
 		if err != nil {
@@ -158,15 +229,24 @@ func fetchAll(client *http.Client, config geoipConfig, output string) error {
 	return nil
 }
 
-func fetchV4V6(c *http.Client, v4, v6 string) ([]byte, error) {
-	v4Data, err := doFetch(c, v4)
+// resolveSource returns the CIDR data for one address family: from the IPinfo
+// mmdb when src is the "ipinfo" sentinel, otherwise by fetching src as a URL.
+func resolveSource(c *http.Client, db *ipinfoDB, code, family, src string) ([]byte, error) {
+	if src == sourceIPinfo {
+		return db.prefixes(code, family)
+	}
+	return doFetch(c, src)
+}
+
+func fetchV4V6(c *http.Client, db *ipinfoDB, code, v4, v6 string) ([]byte, error) {
+	v4Data, err := resolveSource(c, db, code, "v4", v4)
 	if err != nil {
 		return nil, fmt.Errorf("v4: %v", err)
 	}
 	if len(v4Data) == 0 {
 		return nil, fmt.Errorf("v4: no data")
 	}
-	v6Data, err := doFetch(c, v6)
+	v6Data, err := resolveSource(c, db, code, "v6", v6)
 	if err != nil {
 		return nil, fmt.Errorf("v6: %v", err)
 	}
